@@ -6,4 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+quick-xml = "0.31.0"
 tempfile = "3.10.1"
+zip = "1.2.2"
