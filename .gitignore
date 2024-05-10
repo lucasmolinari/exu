@@ -1,1 +1,5 @@
 /target
+*.xlsx
+*.xlsm
+*.xls
+*.txt
