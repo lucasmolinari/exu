@@ -26,8 +26,8 @@ fn main() {
 
     let src_path = match Path::new(args.get(1).unwrap()).canonicalize() {
         Ok(p) => {
-            if p.extension().and_then(OsStr::to_str) != Some("xlsx") {
-                eprintln!("File extension should be xlsx.");
+            let ext = p.extension().and_then(OsStr::to_str);
+            if ext != Some("xlsx") && ext != Some("xlsm") {
                 std::process::exit(0);
             }
             p
