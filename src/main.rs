@@ -32,21 +32,22 @@ fn main() {
             }
             p
         }
-        Err(_) => {
-            eprintln!("Couldn't find the specified file.");
+        Err(e) => {
+            eprintln!("Error reaching for the source path: {}.", e);
             std::process::exit(0);
         }
     };
 
-    let dest_path = match Path::new(args.get(2).unwrap()).canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            eprintln!("Couldn't find destination path.");
-            std::process::exit(0);
-        }
+    let uname = match src_path.file_name() {
+        Some(name) => "unlocked_".to_string() + name.to_str().unwrap(),
+        None => "unlocked.xlsx".to_string(),
     };
+    let dest_path = Path::new(args.get(2).unwrap()).join(uname);
+
+    println!("Destination: {:?}", &dest_path);
 
     read_zipped(&src_path, &dest_path).unwrap();
+    println!("Process Finished.");
 }
 
 fn create_temp(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
@@ -70,15 +71,22 @@ fn read_zipped(src: &PathBuf, dest: &PathBuf) -> Result<()> {
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         warch.start_file(file.name(), options)?;
 
+        let mut content = String::new();
+        match file.read_to_string(&mut content) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Received error trying to read [{}]: {}", file.name(), e);
+                println!("File skipped.");
+                continue;
+            }
+        };
         if file.name().starts_with("xl/worksheets/sheet") {
-            println!("{}", file.name());
-            let mut xml = String::new();
-            file.read_to_string(&mut xml)?;
-
-            let unlocked = unlock(&xml)?;
+            let unlocked = unlock(&content)?;
             warch.write(unlocked.as_bytes())?;
+
             continue;
         }
+        warch.write(content.as_bytes())?;
     }
     Ok(())
 }
