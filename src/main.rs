@@ -44,10 +44,10 @@ fn main() {
     };
     let dest_path = Path::new(args.get(2).unwrap()).join(uname);
 
-    println!("Destination: {:?}", &dest_path);
-
-    read_zipped(&src_path, &dest_path).unwrap();
-    println!("Process Finished.");
+    match unlock(&src_path, &dest_path) {
+        Ok(_) => println!("Process Finished."),
+        Err(e) => eprintln!("{}", e),
+    };
 }
 
 fn create_temp(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
@@ -57,7 +57,7 @@ fn create_temp(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
     Ok(tmpf)
 }
 
-fn read_zipped(src: &PathBuf, dest: &PathBuf) -> Result<()> {
+fn unlock(src: &PathBuf, dest: &PathBuf) -> Result<()> {
     let tsrc = create_temp(src)?;
     let mut arch = ZipArchive::new(tsrc)?;
 
@@ -71,8 +71,8 @@ fn read_zipped(src: &PathBuf, dest: &PathBuf) -> Result<()> {
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         warch.start_file(file.name(), options)?;
 
-        let mut content = String::new();
-        match file.read_to_string(&mut content) {
+        let mut content = Vec::new();
+        match file.read_to_end(&mut content) {
             Ok(_) => {}
             Err(e) => {
                 println!("Received error trying to read [{}]: {}", file.name(), e);
@@ -81,17 +81,20 @@ fn read_zipped(src: &PathBuf, dest: &PathBuf) -> Result<()> {
             }
         };
         if file.name().starts_with("xl/worksheets/sheet") {
-            let unlocked = unlock(&content)?;
+            let cstr = std::str::from_utf8(&content)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+            let unlocked = remove_tag(&cstr, "sheetProtection")?;
             warch.write(unlocked.as_bytes())?;
 
             continue;
         }
-        warch.write(content.as_bytes())?;
+        warch.write_all(&content)?;
     }
     Ok(())
 }
 
-fn unlock(xml: &str) -> Result<String> {
+fn remove_tag(xml: &str, tag: &str) -> Result<String> {
     let mut reader = Reader::from_str(xml);
     let mut writer = Writer::new(Cursor::new(Vec::new()));
 
@@ -101,8 +104,8 @@ fn unlock(xml: &str) -> Result<String> {
             Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
             Ok(Event::Eof) => break,
             Ok(Event::Empty(e)) => {
-                if e.name().as_ref() == b"sheetProtection" {
-                    continue;
+                if e.name().as_ref() != tag.as_bytes() {
+                    writer.write_event(Event::Empty(e)).unwrap();
                 }
             }
             Ok(e) => {
@@ -110,8 +113,8 @@ fn unlock(xml: &str) -> Result<String> {
             }
         };
     }
-    let r = String::from_utf8(writer.into_inner().into_inner());
-    match r {
+
+    match String::from_utf8(writer.into_inner().into_inner()) {
         Ok(s) => Ok(s),
         Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
     }
