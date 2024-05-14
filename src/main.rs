@@ -125,12 +125,6 @@ fn remove_tag(xml: &str, tag: &str) -> Result<Vec<u8>> {
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                 }
             }
-            Ok(Event::Start(e)) => {
-                let end = e.to_end();
-                reader
-                    .read_to_end(end.name())
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-            }
             Ok(e) => {
                 writer
                     .write_event(e)
