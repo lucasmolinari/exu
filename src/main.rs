@@ -5,7 +5,6 @@ use std::io;
 use std::io::Write;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
@@ -21,7 +20,7 @@ fn main() {
 
     if args.len() != 3 {
         eprintln!("Expected 2 arguments but {} were supplied.", args.len() - 1);
-        println!("Usage: -- <source path> <destination path>");
+        println!("Usage: exu -- <source path> <destination path>");
         std::process::exit(0);
     }
 
@@ -52,7 +51,7 @@ fn main() {
     };
 }
 
-fn create_temp(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
+fn temp_copy(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
     let mut srcf = fs::File::open(src_path)?;
     let mut tmpf = tempfile::NamedTempFile::new()?;
     io::copy(&mut srcf, &mut tmpf)?;
@@ -60,8 +59,7 @@ fn create_temp(src_path: &PathBuf) -> Result<tempfile::NamedTempFile> {
 }
 
 fn unlock(src: &PathBuf, dest: &PathBuf) -> Result<()> {
-    let time = Instant::now();
-    let tsrc = create_temp(src).unwrap();
+    let tsrc = temp_copy(src)?; // Create temporary copy of the source file for safety reasons.
     let mut arch = ZipArchive::new(tsrc)?;
 
     let rdest = fs::File::create(dest)?;
@@ -70,6 +68,7 @@ fn unlock(src: &PathBuf, dest: &PathBuf) -> Result<()> {
     for i in 0..arch.len() {
         let mut file = arch.by_index(i)?;
 
+        // Not dealing with compression this time ;)
         let options =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         warch.start_file(file.name(), options)?;
@@ -83,6 +82,7 @@ fn unlock(src: &PathBuf, dest: &PathBuf) -> Result<()> {
                 continue;
             }
         };
+        // Also not dealing with multi-threading or async operations
         if file.name().starts_with("xl/worksheets/sheet") {
             let cstr = std::str::from_utf8(&content)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -105,7 +105,6 @@ fn unlock(src: &PathBuf, dest: &PathBuf) -> Result<()> {
 
         warch.write_all(&content)?;
     }
-    println!("{:?}", time.elapsed());
     Ok(())
 }
 
